@@ -13,7 +13,10 @@
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
+      "position": [
+        0,
+        300
+      ],
       "webhookId": "video-repurpose-webhook"
     },
     {
@@ -61,7 +64,10 @@
       "name": "Validate Input",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -83,7 +89,10 @@
       "name": "Validation Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [440, 500]
+      "position": [
+        440,
+        500
+      ]
     },
     {
       "parameters": {
@@ -121,7 +130,10 @@
       "name": "Set Variables",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -131,7 +143,10 @@
       "name": "Download Video (yt-dlp)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -160,7 +175,10 @@
       "name": "Check Download",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -170,7 +188,10 @@
       "name": "Extract Audio (FFmpeg)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 300]
+      "position": [
+        1100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -199,7 +220,10 @@
       "name": "Check Extract",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1320, 300]
+      "position": [
+        1320,
+        300
+      ]
     },
     {
       "parameters": {
@@ -209,7 +233,10 @@
       "name": "Read Audio File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1540, 300]
+      "position": [
+        1540,
+        300
+      ]
     },
     {
       "parameters": {
@@ -221,6 +248,11 @@
         "contentType": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
+            {
+              "name": "file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "data"
+            },
             {
               "name": "model",
               "value": "whisper-1"
@@ -235,8 +267,6 @@
             }
           ]
         },
-        "sendBinaryData": true,
-        "binaryPropertyName": "data",
         "options": {
           "timeout": 300000
         }
@@ -245,7 +275,10 @@
       "name": "Transcribe (Whisper API)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1760, 300]
+      "position": [
+        1760,
+        300
+      ]
     },
     {
       "parameters": {
@@ -255,7 +288,10 @@
       "name": "Format Transcript",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1980, 300]
+      "position": [
+        1980,
+        300
+      ]
     },
     {
       "parameters": {
@@ -274,7 +310,10 @@
       "name": "Detect Key Moments (GPT)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2200, 300]
+      "position": [
+        2200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -284,7 +323,10 @@
       "name": "Parse Moments",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2420, 300]
+      "position": [
+        2420,
+        300
+      ]
     },
     {
       "parameters": {
@@ -295,7 +337,10 @@
       "name": "Loop Over Moments",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [2640, 300]
+      "position": [
+        2640,
+        300
+      ]
     },
     {
       "parameters": {
@@ -305,7 +350,10 @@
       "name": "Cut Clip (FFmpeg)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2860, 300]
+      "position": [
+        2860,
+        300
+      ]
     },
     {
       "parameters": {
@@ -324,7 +372,10 @@
       "name": "Generate Caption (GPT)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3080, 300]
+      "position": [
+        3080,
+        300
+      ]
     },
     {
       "parameters": {
@@ -334,7 +385,10 @@
       "name": "Parse Caption",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3300, 300]
+      "position": [
+        3300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -344,7 +398,10 @@
       "name": "Read Clip File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3520, 300]
+      "position": [
+        3520,
+        300
+      ]
     },
     {
       "parameters": {
@@ -354,7 +411,10 @@
       "name": "Prepare Upload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3740, 300]
+      "position": [
+        3740,
+        300
+      ]
     },
     {
       "parameters": {
@@ -377,7 +437,10 @@
       "name": "Upload to R2",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3960, 300]
+      "position": [
+        3960,
+        300
+      ]
     },
     {
       "parameters": {
@@ -387,7 +450,10 @@
       "name": "Format Clip Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4180, 300]
+      "position": [
+        4180,
+        300
+      ]
     },
     {
       "parameters": {
@@ -399,7 +465,10 @@
       "name": "Aggregate Clips",
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
-      "position": [4400, 300]
+      "position": [
+        4400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -409,7 +478,10 @@
       "name": "Prepare Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4620, 300]
+      "position": [
+        4620,
+        300
+      ]
     },
     {
       "parameters": {
@@ -431,7 +503,10 @@
       "name": "Send Success Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4840, 300]
+      "position": [
+        4840,
+        300
+      ]
     },
     {
       "parameters": {
@@ -441,7 +516,10 @@
       "name": "Cleanup Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5060, 300]
+      "position": [
+        5060,
+        300
+      ]
     },
     {
       "parameters": {
@@ -451,7 +529,10 @@
       "name": "Prepare Error Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 600]
+      "position": [
+        1100,
+        600
+      ]
     },
     {
       "parameters": {
@@ -473,7 +554,10 @@
       "name": "Send Error Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 600]
+      "position": [
+        1320,
+        600
+      ]
     },
     {
       "parameters": {
@@ -495,7 +579,10 @@
       "name": "Download Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [880, 500]
+      "position": [
+        880,
+        500
+      ]
     },
     {
       "parameters": {
@@ -517,7 +604,10 @@
       "name": "Extract Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1320, 500]
+      "position": [
+        1320,
+        500
+      ]
     }
   ],
   "connections": {
@@ -865,4 +955,3 @@
   "triggerCount": 1,
   "versionId": "3"
 }
-
