@@ -13,10 +13,7 @@
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        0,
-        300
-      ],
+      "position": [0, 300],
       "webhookId": "video-repurpose-webhook"
     },
     {
@@ -64,10 +61,7 @@
       "name": "Validate Input",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        220,
-        300
-      ]
+      "position": [220, 300]
     },
     {
       "parameters": {
@@ -89,10 +83,7 @@
       "name": "Validation Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [
-        440,
-        500
-      ]
+      "position": [440, 500]
     },
     {
       "parameters": {
@@ -130,10 +121,7 @@
       "name": "Set Variables",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [
-        440,
-        300
-      ]
+      "position": [440, 300]
     },
     {
       "parameters": {
@@ -143,10 +131,7 @@
       "name": "Download Video (yt-dlp)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        660,
-        300
-      ]
+      "position": [660, 300]
     },
     {
       "parameters": {
@@ -175,10 +160,7 @@
       "name": "Check Download",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        880,
-        300
-      ]
+      "position": [880, 300]
     },
     {
       "parameters": {
@@ -188,10 +170,7 @@
       "name": "Extract Audio (FFmpeg)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1100,
-        300
-      ]
+      "position": [1100, 300]
     },
     {
       "parameters": {
@@ -220,10 +199,7 @@
       "name": "Check Extract",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        1320,
-        300
-      ]
+      "position": [1320, 300]
     },
     {
       "parameters": {
@@ -233,10 +209,7 @@
       "name": "Read Audio File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1540,
-        300
-      ]
+      "position": [1540, 300]
     },
     {
       "parameters": {
@@ -275,23 +248,17 @@
       "name": "Transcribe (Whisper API)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1760,
-        300
-      ]
+      "position": [1760, 300]
     },
     {
       "parameters": {
-        "jsCode": "const segments = $input.first().json.segments || [];\nconst fullText = $input.first().json.text || '';\nconst prevData = $('Check Extract').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    transcript: JSON.stringify(segments),\n    fullText: fullText,\n    segmentCount: segments.length\n  }\n}];"
+        "jsCode": "const segments = $input.first().json.segments || [];\nconst fullText = $input.first().json.text || '';\nconst prevData = $('Check Extract').first().json;\n\nconst platform = prevData.platform || 'tiktok';\nconst style = prevData.style || 'educational';\n\nconst userPrompt = `Your task is to identify the MOST ENGAGING moments from a video transcript that would perform well as standalone vertical clips on ${platform}.\n\nThe content style is: ${style}\n\nANALYZE THIS TRANSCRIPT:\n${fullText}\n\nTIMESTAMPED SEGMENTS:\n${JSON.stringify(segments)}\n\nRULES:\n1. Select EXACTLY 5 moments\n2. Each clip should be 30-60 seconds long\n3. Prioritize moments with:\n   - Strong hooks or surprising statements\n   - Emotional peaks or revelations\n   - Actionable advice or key insights\n   - Controversial or debate-worthy points\n   - Funny or relatable moments\n4. Ensure clips are self-contained and make sense without context\n5. Avoid mid-sentence cuts\n\nOUTPUT FORMAT (JSON only, no markdown):\n[\n  {\n    \"momentIndex\": 1,\n    \"start\": <start_time_in_seconds>,\n    \"end\": <end_time_in_seconds>,\n    \"reason\": \"<brief explanation why this moment is engaging>\",\n    \"hookPotential\": \"<the opening line that hooks viewers>\"\n  }\n]\n\nReturn ONLY the JSON array, no other text.`;\n\nconst requestBody = {\n  model: 'gpt-5.2',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are an expert video content analyst for short-form social media. Return ONLY valid JSON, no markdown.'\n    },\n    {\n      role: 'user',\n      content: userPrompt\n    }\n  ],\n  temperature: 0.3,\n  max_completion_tokens: 2000\n};\n\nreturn [{\n  json: {\n    ...prevData,\n    transcript: JSON.stringify(segments),\n    fullText: fullText,\n    segmentCount: segments.length,\n    gptRequestBody: requestBody\n  }\n}];"
       },
       "id": "format-transcript",
       "name": "Format Transcript",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1980,
-        300
-      ]
+      "position": [1980, 300]
     },
     {
       "parameters": {
@@ -301,7 +268,7 @@
         "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"gpt-5.2-pro\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert video content analyst for short-form social media. Return ONLY valid JSON, no markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Your task is to identify the MOST ENGAGING moments from a video transcript that would perform well as standalone vertical clips on {{ $json.platform }}.\\n\\nThe content style is: {{ $json.style }}\\n\\nANALYZE THIS TRANSCRIPT:\\n{{ $json.fullText }}\\n\\nTIMESTAMPED SEGMENTS:\\n{{ $json.transcript }}\\n\\nRULES:\\n1. Select EXACTLY 5 moments\\n2. Each clip should be 30-60 seconds long\\n3. Prioritize moments with:\\n   - Strong hooks or surprising statements\\n   - Emotional peaks or revelations\\n   - Actionable advice or key insights\\n   - Controversial or debate-worthy points\\n   - Funny or relatable moments\\n4. Ensure clips are self-contained and make sense without context\\n5. Avoid mid-sentence cuts\\n\\nOUTPUT FORMAT (JSON only, no markdown):\\n[\\n  {\\n    \\\"momentIndex\\\": 1,\\n    \\\"start\\\": <start_time_in_seconds>,\\n    \\\"end\\\": <end_time_in_seconds>,\\n    \\\"reason\\\": \\\"<brief explanation why this moment is engaging>\\\",\\n    \\\"hookPotential\\\": \\\"<the opening line that hooks viewers>\\\"\\n  }\\n]\\n\\nReturn ONLY the JSON array, no other text.\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 2000\n}",
+        "jsonBody": "={{ JSON.stringify($json.gptRequestBody) }}",
         "options": {
           "timeout": 120000
         }
@@ -310,10 +277,7 @@
       "name": "Detect Key Moments (GPT)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2200,
-        300
-      ]
+      "position": [2200, 300]
     },
     {
       "parameters": {
@@ -323,10 +287,7 @@
       "name": "Parse Moments",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2420,
-        300
-      ]
+      "position": [2420, 300]
     },
     {
       "parameters": {
@@ -337,10 +298,7 @@
       "name": "Loop Over Moments",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [
-        2640,
-        300
-      ]
+      "position": [2640, 300]
     },
     {
       "parameters": {
@@ -350,10 +308,17 @@
       "name": "Cut Clip (FFmpeg)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2860,
-        300
-      ]
+      "position": [2860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst userPrompt = `GENERATE CAPTION FOR THIS CLIP:\n\nClip Context: ${item.reason || ''}\nHook Moment: ${item.hookPotential || ''}\nContent Style: ${item.style || 'educational'}\nPlatform: ${item.platform || 'tiktok'}\n\nCREATE:\n1. HOOK: The first line viewers see (max 10 words, must stop the scroll)\n2. CAPTION: 1-2 short lines that add context or create curiosity (casual ${item.platform || 'tiktok'} tone)\n3. HASHTAGS: Exactly 5 relevant hashtags (mix of broad + niche)\n\nPLATFORM GUIDELINES:\n- TikTok: Casual, trendy, use slang appropriately, emojis welcome\n- Instagram: Slightly more polished, storytelling elements\n- YouTube Shorts: Value-focused, clear benefit statement\n\nOUTPUT FORMAT (JSON only):\n{\n  \"hook\": \"<scroll-stopping first line>\",\n  \"caption\": \"<1-2 line caption>\",\n  \"hashtags\": [\"#tag1\", \"#tag2\", \"#tag3\", \"#tag4\", \"#tag5\"]\n}\n\nReturn ONLY the JSON object, no other text.`;\n\nconst requestBody = {\n  model: 'gpt-5.2',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are a viral social media copywriter. Return ONLY valid JSON, no markdown.'\n    },\n    {\n      role: 'user',\n      content: userPrompt\n    }\n  ],\n  temperature: 0.7,\n  max_completion_tokens: 500\n};\n\nreturn [{\n  json: {\n    ...item,\n    captionRequestBody: requestBody\n  }\n}];"
+      },
+      "id": "prepare-caption-request",
+      "name": "Prepare Caption Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 300]
     },
     {
       "parameters": {
@@ -363,7 +328,7 @@
         "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"gpt-5.2\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a viral social media copywriter. Return ONLY valid JSON, no markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"GENERATE CAPTION FOR THIS CLIP:\\n\\nClip Context: {{ $json.reason }}\\nHook Moment: {{ $json.hookPotential }}\\nContent Style: {{ $json.style }}\\nPlatform: {{ $json.platform }}\\n\\nCREATE:\\n1. HOOK: The first line viewers see (max 10 words, must stop the scroll)\\n2. CAPTION: 1-2 short lines that add context or create curiosity (casual {{ $json.platform }} tone)\\n3. HASHTAGS: Exactly 5 relevant hashtags (mix of broad + niche)\\n\\nPLATFORM GUIDELINES:\\n- TikTok: Casual, trendy, use slang appropriately, emojis welcome\\n- Instagram: Slightly more polished, storytelling elements\\n- YouTube Shorts: Value-focused, clear benefit statement\\n\\nOUTPUT FORMAT (JSON only):\\n{\\n  \\\"hook\\\": \\\"<scroll-stopping first line>\\\",\\n  \\\"caption\\\": \\\"<1-2 line caption>\\\",\\n  \\\"hashtags\\\": [\\\"#tag1\\\", \\\"#tag2\\\", \\\"#tag3\\\", \\\"#tag4\\\", \\\"#tag5\\\"]\\n}\\n\\nReturn ONLY the JSON object, no other text.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 500\n}",
+        "jsonBody": "={{ JSON.stringify($json.captionRequestBody) }}",
         "options": {
           "timeout": 60000
         }
@@ -372,23 +337,17 @@
       "name": "Generate Caption (GPT)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        3080,
-        300
-      ]
+      "position": [3190, 300]
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst previousData = $('Loop Over Moments').first().json;\n\nlet gptContent = '';\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  gptContent = response.choices[0].message.content;\n} else {\n  gptContent = '{\"hook\": \"You need to see this\", \"caption\": \"Watch till the end!\", \"hashtags\": [\"#viral\", \"#foryou\", \"#trending\", \"#mustwatch\", \"#fyp\"]}';\n}\n\nlet cleanedResponse = gptContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\ntry {\n  const caption = JSON.parse(cleanedResponse);\n  \n  return [{\n    json: {\n      clipIndex: previousData.clipIndex,\n      clipPath: previousData.clipPath,\n      hook: caption.hook,\n      caption: caption.caption,\n      hashtags: caption.hashtags,\n      jobId: previousData.jobId,\n      workDir: previousData.workDir,\n      callbackUrl: previousData.callbackUrl,\n      platform: previousData.platform,\n      reason: previousData.reason\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      clipIndex: previousData.clipIndex,\n      clipPath: previousData.clipPath,\n      hook: previousData.hookPotential || \"You need to see this\",\n      caption: \"Watch till the end!\",\n      hashtags: [\"#viral\", \"#foryou\", \"#trending\", \"#mustwatch\", \"#fyp\"],\n      jobId: previousData.jobId,\n      workDir: previousData.workDir,\n      callbackUrl: previousData.callbackUrl,\n      platform: previousData.platform,\n      reason: previousData.reason\n    }\n  }];\n}"
+        "jsCode": "const response = $input.first().json;\nconst previousData = $('Prepare Caption Request').first().json;\n\nlet gptContent = '';\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  gptContent = response.choices[0].message.content;\n} else {\n  gptContent = '{\"hook\": \"You need to see this\", \"caption\": \"Watch till the end!\", \"hashtags\": [\"#viral\", \"#foryou\", \"#trending\", \"#mustwatch\", \"#fyp\"]}';\n}\n\nlet cleanedResponse = gptContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\ntry {\n  const caption = JSON.parse(cleanedResponse);\n  \n  return [{\n    json: {\n      clipIndex: previousData.clipIndex,\n      clipPath: previousData.clipPath,\n      hook: caption.hook,\n      caption: caption.caption,\n      hashtags: caption.hashtags,\n      jobId: previousData.jobId,\n      workDir: previousData.workDir,\n      callbackUrl: previousData.callbackUrl,\n      platform: previousData.platform,\n      reason: previousData.reason\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      clipIndex: previousData.clipIndex,\n      clipPath: previousData.clipPath,\n      hook: previousData.hookPotential || \"You need to see this\",\n      caption: \"Watch till the end!\",\n      hashtags: [\"#viral\", \"#foryou\", \"#trending\", \"#mustwatch\", \"#fyp\"],\n      jobId: previousData.jobId,\n      workDir: previousData.workDir,\n      callbackUrl: previousData.callbackUrl,\n      platform: previousData.platform,\n      reason: previousData.reason\n    }\n  }];\n}"
       },
       "id": "parse-caption",
       "name": "Parse Caption",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        3300,
-        300
-      ]
+      "position": [3300, 300]
     },
     {
       "parameters": {
@@ -398,10 +357,7 @@
       "name": "Read Clip File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        3520,
-        300
-      ]
+      "position": [3520, 300]
     },
     {
       "parameters": {
@@ -411,10 +367,7 @@
       "name": "Prepare Upload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        3740,
-        300
-      ]
+      "position": [3740, 300]
     },
     {
       "parameters": {
@@ -437,10 +390,7 @@
       "name": "Upload to R2",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        3960,
-        300
-      ]
+      "position": [3960, 300]
     },
     {
       "parameters": {
@@ -450,10 +400,7 @@
       "name": "Format Clip Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        4180,
-        300
-      ]
+      "position": [4180, 300]
     },
     {
       "parameters": {
@@ -465,10 +412,7 @@
       "name": "Aggregate Clips",
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
-      "position": [
-        4400,
-        300
-      ]
+      "position": [4400, 300]
     },
     {
       "parameters": {
@@ -478,10 +422,7 @@
       "name": "Prepare Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        4620,
-        300
-      ]
+      "position": [4620, 300]
     },
     {
       "parameters": {
@@ -503,10 +444,7 @@
       "name": "Send Success Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        4840,
-        300
-      ]
+      "position": [4840, 300]
     },
     {
       "parameters": {
@@ -516,10 +454,7 @@
       "name": "Cleanup Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        5060,
-        300
-      ]
+      "position": [5060, 300]
     },
     {
       "parameters": {
@@ -529,10 +464,7 @@
       "name": "Prepare Error Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1100,
-        600
-      ]
+      "position": [1100, 600]
     },
     {
       "parameters": {
@@ -554,10 +486,7 @@
       "name": "Send Error Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1320,
-        600
-      ]
+      "position": [1320, 600]
     },
     {
       "parameters": {
@@ -579,10 +508,7 @@
       "name": "Download Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [
-        880,
-        500
-      ]
+      "position": [880, 500]
     },
     {
       "parameters": {
@@ -604,10 +530,7 @@
       "name": "Extract Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [
-        1320,
-        500
-      ]
+      "position": [1320, 500]
     }
   ],
   "connections": {
@@ -819,6 +742,17 @@
       "main": [
         [
           {
+            "node": "Prepare Caption Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Caption Request": {
+      "main": [
+        [
+          {
             "node": "Generate Caption (GPT)",
             "type": "main",
             "index": 0
@@ -955,3 +889,4 @@
   "triggerCount": 1,
   "versionId": "3"
 }
+
