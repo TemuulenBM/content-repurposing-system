@@ -252,7 +252,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const segments = $input.first().json.segments || [];\nconst fullText = $input.first().json.text || '';\nconst prevData = $('Check Extract').first().json;\n\nconst platform = prevData.platform || 'tiktok';\nconst style = prevData.style || 'educational';\n\nconst userPrompt = `Your task is to identify the MOST ENGAGING moments from a video transcript that would perform well as standalone vertical clips on ${platform}.\n\nThe content style is: ${style}\n\nANALYZE THIS TRANSCRIPT:\n${fullText}\n\nTIMESTAMPED SEGMENTS:\n${JSON.stringify(segments)}\n\nRULES:\n1. Select EXACTLY 5 moments\n2. Each clip should be 30-60 seconds long\n3. Prioritize moments with:\n   - Strong hooks or surprising statements\n   - Emotional peaks or revelations\n   - Actionable advice or key insights\n   - Controversial or debate-worthy points\n   - Funny or relatable moments\n4. Ensure clips are self-contained and make sense without context\n5. Avoid mid-sentence cuts\n\nOUTPUT FORMAT (JSON only, no markdown):\n[\n  {\n    \"momentIndex\": 1,\n    \"start\": <start_time_in_seconds>,\n    \"end\": <end_time_in_seconds>,\n    \"reason\": \"<brief explanation why this moment is engaging>\",\n    \"hookPotential\": \"<the opening line that hooks viewers>\"\n  }\n]\n\nReturn ONLY the JSON array, no other text.`;\n\nconst requestBody = {\n  model: 'gpt-5.2',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are an expert video content analyst for short-form social media. Return ONLY valid JSON, no markdown.'\n    },\n    {\n      role: 'user',\n      content: userPrompt\n    }\n  ],\n  temperature: 0.3,\n  max_completion_tokens: 2000\n};\n\nreturn [{\n  json: {\n    ...prevData,\n    transcript: JSON.stringify(segments),\n    fullText: fullText,\n    segmentCount: segments.length,\n    gptRequestBody: requestBody\n  }\n}];"
+        "jsCode": "const segments = $input.first().json.segments || [];\nconst fullText = $input.first().json.text || '';\n\n// Get metadata from Set Variables node which has all the original webhook data\nconst setVars = $('Set Variables').first().json;\n\nconst platform = setVars.platform || 'tiktok';\nconst style = setVars.style || 'educational';\nconst jobId = setVars.jobId;\nconst workDir = setVars.workDir;\nconst callbackUrl = setVars.callbackUrl;\n\nconst userPrompt = `Your task is to identify the MOST ENGAGING moments from a video transcript that would perform well as standalone vertical clips on ${platform}.\n\nThe content style is: ${style}\n\nANALYZE THIS TRANSCRIPT:\n${fullText}\n\nTIMESTAMPED SEGMENTS:\n${JSON.stringify(segments)}\n\nRULES:\n1. Select EXACTLY 5 moments\n2. Each clip should be 30-60 seconds long\n3. Prioritize moments with:\n   - Strong hooks or surprising statements\n   - Emotional peaks or revelations\n   - Actionable advice or key insights\n   - Controversial or debate-worthy points\n   - Funny or relatable moments\n4. Ensure clips are self-contained and make sense without context\n5. Avoid mid-sentence cuts\n\nOUTPUT FORMAT (JSON only, no markdown):\n[\n  {\n    \"momentIndex\": 1,\n    \"start\": <start_time_in_seconds>,\n    \"end\": <end_time_in_seconds>,\n    \"reason\": \"<brief explanation why this moment is engaging>\",\n    \"hookPotential\": \"<the opening line that hooks viewers>\"\n  }\n]\n\nReturn ONLY the JSON array, no other text.`;\n\nconst requestBody = {\n  model: 'gpt-5.2',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are an expert video content analyst for short-form social media. Return ONLY valid JSON, no markdown.'\n    },\n    {\n      role: 'user',\n      content: userPrompt\n    }\n  ],\n  temperature: 0.3,\n  max_completion_tokens: 2000\n};\n\nreturn [{\n  json: {\n    jobId: jobId,\n    workDir: workDir,\n    platform: platform,\n    style: style,\n    callbackUrl: callbackUrl,\n    transcript: JSON.stringify(segments),\n    fullText: fullText,\n    segmentCount: segments.length,\n    gptRequestBody: requestBody\n  }\n}];"
       },
       "id": "format-transcript",
       "name": "Format Transcript",
@@ -416,7 +416,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const clips = $input.first().json.clips;\nconst firstClip = clips[0];\n\nconst payload = {\n  jobId: firstClip.jobId,\n  status: 'success',\n  processedAt: new Date().toISOString(),\n  clipCount: clips.length,\n  clips: clips.map(c => ({\n    clipIndex: c.clipIndex,\n    url: c.url,\n    hook: c.hook,\n    caption: c.caption,\n    hashtags: c.hashtags\n  }))\n};\n\nreturn [{\n  json: {\n    callbackUrl: firstClip.callbackUrl,\n    payload: payload\n  }\n}];"
+        "jsCode": "const aggregatedData = $input.first().json;\nconst clips = aggregatedData.clips;\n\nif (!clips || clips.length === 0) {\n  throw new Error('No clips found in aggregated data. Aggregated data keys: ' + Object.keys(aggregatedData).join(', '));\n}\n\nconst firstClip = clips[0];\n\nif (!firstClip.callbackUrl) {\n  throw new Error('callbackUrl is missing from clip data. First clip keys: ' + Object.keys(firstClip).join(', '));\n}\n\nconst payload = {\n  jobId: firstClip.jobId,\n  status: 'success',\n  processedAt: new Date().toISOString(),\n  clipCount: clips.length,\n  clips: clips.map(c => ({\n    clipIndex: c.clipIndex,\n    url: c.url,\n    hook: c.hook,\n    caption: c.caption,\n    hashtags: c.hashtags\n  }))\n};\n\nreturn [{\n  json: {\n    callbackUrl: firstClip.callbackUrl,\n    payload: payload\n  }\n}];"
       },
       "id": "prepare-callback",
       "name": "Prepare Callback",
@@ -427,7 +427,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $json.callbackUrl }}",
+        "url": "={{ $json.callbackUrl && $json.callbackUrl.trim() !== '' ? $json.callbackUrl : 'https://httpbin.org/post' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.payload) }}",
@@ -435,7 +435,13 @@
           "timeout": 30000,
           "response": {
             "response": {
-              "neverError": true
+              "neverError": true,
+              "fullResponse": false
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
             }
           }
         }
