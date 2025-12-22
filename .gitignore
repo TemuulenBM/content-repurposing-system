@@ -1,0 +1,7 @@
+.env
+credentials/
+data/
+*.log
+node_modules/
+.cursor/
+

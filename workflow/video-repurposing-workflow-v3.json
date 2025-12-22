@@ -1,0 +1,878 @@
+{
+  "name": "Video Content Repurposing Pipeline v3",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "repurpose-video",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "video-repurpose-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-jobId",
+              "leftValue": "={{ $json.body.jobId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "condition-videoUrl",
+              "leftValue": "={{ $json.body.videoUrl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "condition-callbackUrl",
+              "leftValue": "={{ $json.body.callbackUrl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "error",
+              "value": "Missing required fields: jobId, videoUrl, or callbackUrl"
+            },
+            {
+              "name": "status",
+              "value": "validation_error"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validation-error",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 500]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "jobId",
+              "value": "={{ $json.body.jobId }}"
+            },
+            {
+              "name": "videoUrl",
+              "value": "={{ $json.body.videoUrl }}"
+            },
+            {
+              "name": "callbackUrl",
+              "value": "={{ $json.body.callbackUrl }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $json.body.platform || 'tiktok' }}"
+            },
+            {
+              "name": "style",
+              "value": "={{ $json.body.style || 'educational' }}"
+            },
+            {
+              "name": "workDir",
+              "value": "=/data/{{ $json.body.jobId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-variables",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { execSync } = require('child_process');\n\nconst workDir = $input.first().json.workDir;\nconst videoUrl = $input.first().json.videoUrl;\n\ntry {\n  // Create directory\n  execSync(`mkdir -p ${workDir}`);\n  \n  // Download video using yt-dlp\n  const command = `yt-dlp -f 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' --merge-output-format mp4 -o '${workDir}/input.mp4' '${videoUrl}' 2>&1`;\n  \n  const result = execSync(command, { \n    encoding: 'utf8',\n    maxBuffer: 50 * 1024 * 1024,\n    timeout: 600000\n  });\n  \n  return [{\n    json: {\n      ...$input.first().json,\n      downloadStatus: 'success',\n      downloadOutput: result\n    }\n  }];\n} catch (error) {\n  return [{\n    json: {\n      ...$input.first().json,\n      downloadStatus: 'failed',\n      downloadError: error.message,\n      downloadOutput: error.stdout || error.stderr || ''\n    }\n  }];\n}"
+      },
+      "id": "download-video",
+      "name": "Download Video (yt-dlp)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-download",
+              "leftValue": "={{ $json.downloadStatus }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-download",
+      "name": "Check Download",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { execSync } = require('child_process');\nconst fs = require('fs');\n\nconst workDir = $input.first().json.workDir;\n\ntry {\n  const command = `ffmpeg -y -i ${workDir}/input.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 ${workDir}/audio.wav 2>&1`;\n  \n  try {\n    execSync(command, { \n      encoding: 'utf8',\n      maxBuffer: 50 * 1024 * 1024,\n      timeout: 300000\n    });\n  } catch (e) {\n    // FFmpeg writes to stderr even on success\n  }\n  \n  if (fs.existsSync(`${workDir}/audio.wav`)) {\n    return [{\n      json: {\n        ...$input.first().json,\n        extractStatus: 'success'\n      }\n    }];\n  } else {\n    throw new Error('Audio file not created');\n  }\n} catch (error) {\n  return [{\n    json: {\n      ...$input.first().json,\n      extractStatus: 'failed',\n      extractError: error.message\n    }\n  }];\n}"
+      },
+      "id": "extract-audio",
+      "name": "Extract Audio (FFmpeg)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-extract",
+              "leftValue": "={{ $json.extractStatus }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-extract",
+      "name": "Check Extract",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "filePath": "={{ $json.workDir }}/audio.wav",
+        "options": {
+          "fileName": "audio.wav",
+          "mimeType": "audio/wav"
+        }
+      },
+      "id": "read-audio",
+      "name": "Read Audio File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1540, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "response_format",
+              "value": "verbose_json"
+            },
+            {
+              "name": "timestamp_granularities[]",
+              "value": "segment"
+            }
+          ]
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "data",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "transcribe-whisper",
+      "name": "Transcribe (Whisper API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const segments = $input.first().json.segments || [];\nconst fullText = $input.first().json.text || '';\nconst prevData = $('Check Extract').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    transcript: JSON.stringify(segments),\n    fullText: fullText,\n    segmentCount: segments.length\n  }\n}];"
+      },
+      "id": "format-transcript",
+      "name": "Format Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-5.2-pro\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert video content analyst for short-form social media. Return ONLY valid JSON, no markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Your task is to identify the MOST ENGAGING moments from a video transcript that would perform well as standalone vertical clips on {{ $json.platform }}.\\n\\nThe content style is: {{ $json.style }}\\n\\nANALYZE THIS TRANSCRIPT:\\n{{ $json.fullText }}\\n\\nTIMESTAMPED SEGMENTS:\\n{{ $json.transcript }}\\n\\nRULES:\\n1. Select EXACTLY 5 moments\\n2. Each clip should be 30-60 seconds long\\n3. Prioritize moments with:\\n   - Strong hooks or surprising statements\\n   - Emotional peaks or revelations\\n   - Actionable advice or key insights\\n   - Controversial or debate-worthy points\\n   - Funny or relatable moments\\n4. Ensure clips are self-contained and make sense without context\\n5. Avoid mid-sentence cuts\\n\\nOUTPUT FORMAT (JSON only, no markdown):\\n[\\n  {\\n    \\\"momentIndex\\\": 1,\\n    \\\"start\\\": <start_time_in_seconds>,\\n    \\\"end\\\": <end_time_in_seconds>,\\n    \\\"reason\\\": \\\"<brief explanation why this moment is engaging>\\\",\\n    \\\"hookPotential\\\": \\\"<the opening line that hooks viewers>\\\"\\n  }\\n]\\n\\nReturn ONLY the JSON array, no other text.\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 2000\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "detect-moments",
+      "name": "Detect Key Moments (GPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prevData = $('Format Transcript').first().json;\n\nlet gptContent = '';\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  gptContent = response.choices[0].message.content;\n} else {\n  throw new Error('Invalid GPT response structure');\n}\n\nlet cleanedResponse = gptContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\ntry {\n  const moments = JSON.parse(cleanedResponse);\n  \n  const validatedMoments = moments.map((m, idx) => ({\n    clipIndex: idx + 1,\n    start: parseFloat(m.start),\n    end: parseFloat(m.end),\n    duration: parseFloat(m.end) - parseFloat(m.start),\n    reason: m.reason,\n    hookPotential: m.hookPotential,\n    jobId: prevData.jobId,\n    workDir: prevData.workDir,\n    platform: prevData.platform,\n    style: prevData.style,\n    callbackUrl: prevData.callbackUrl,\n    fullText: prevData.fullText\n  }));\n  \n  return validatedMoments.map(m => ({ json: m }));\n} catch (e) {\n  throw new Error(`Failed to parse GPT response: ${e.message}. Response was: ${cleanedResponse}`);\n}"
+      },
+      "id": "parse-moments",
+      "name": "Parse Moments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-moments",
+      "name": "Loop Over Moments",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { execSync } = require('child_process');\nconst fs = require('fs');\n\nconst item = $input.first().json;\nconst workDir = item.workDir;\nconst clipIndex = item.clipIndex;\nconst start = item.start;\nconst duration = item.duration;\n\ntry {\n  const probeWidth = execSync(`ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 \"${workDir}/input.mp4\"`, { encoding: 'utf8' }).trim();\n  const probeHeight = execSync(`ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 \"${workDir}/input.mp4\"`, { encoding: 'utf8' }).trim();\n  \n  const width = parseInt(probeWidth);\n  const height = parseInt(probeHeight);\n  const targetRatio = 9 / 16;\n  \n  let cropW, cropH;\n  if (width / height > targetRatio) {\n    cropH = height;\n    cropW = Math.floor(height * targetRatio);\n  } else {\n    cropW = width;\n    cropH = Math.floor(width / targetRatio);\n  }\n  \n  const outputPath = `${workDir}/clip_${clipIndex}.mp4`;\n  \n  const ffmpegCmd = `ffmpeg -y -ss ${start} -i \"${workDir}/input.mp4\" -t ${duration} -vf \"crop=${cropW}:${cropH}:(in_w-${cropW})/2:(in_h-${cropH})/2,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2\" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart \"${outputPath}\" 2>&1`;\n  \n  try {\n    execSync(ffmpegCmd, { \n      encoding: 'utf8',\n      maxBuffer: 50 * 1024 * 1024,\n      timeout: 300000\n    });\n  } catch (e) {\n    // FFmpeg may write to stderr\n  }\n  \n  if (fs.existsSync(outputPath)) {\n    return [{\n      json: {\n        ...item,\n        clipPath: outputPath,\n        clipStatus: 'success'\n      }\n    }];\n  } else {\n    throw new Error('Output file not created');\n  }\n} catch (error) {\n  return [{\n    json: {\n      ...item,\n      clipStatus: 'failed',\n      clipError: error.message\n    }\n  }];\n}"
+      },
+      "id": "cut-clip",
+      "name": "Cut Clip (FFmpeg)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2860, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-5.2\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a viral social media copywriter. Return ONLY valid JSON, no markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"GENERATE CAPTION FOR THIS CLIP:\\n\\nClip Context: {{ $json.reason }}\\nHook Moment: {{ $json.hookPotential }}\\nContent Style: {{ $json.style }}\\nPlatform: {{ $json.platform }}\\n\\nCREATE:\\n1. HOOK: The first line viewers see (max 10 words, must stop the scroll)\\n2. CAPTION: 1-2 short lines that add context or create curiosity (casual {{ $json.platform }} tone)\\n3. HASHTAGS: Exactly 5 relevant hashtags (mix of broad + niche)\\n\\nPLATFORM GUIDELINES:\\n- TikTok: Casual, trendy, use slang appropriately, emojis welcome\\n- Instagram: Slightly more polished, storytelling elements\\n- YouTube Shorts: Value-focused, clear benefit statement\\n\\nOUTPUT FORMAT (JSON only):\\n{\\n  \\\"hook\\\": \\\"<scroll-stopping first line>\\\",\\n  \\\"caption\\\": \\\"<1-2 line caption>\\\",\\n  \\\"hashtags\\\": [\\\"#tag1\\\", \\\"#tag2\\\", \\\"#tag3\\\", \\\"#tag4\\\", \\\"#tag5\\\"]\\n}\\n\\nReturn ONLY the JSON object, no other text.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 500\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "generate-caption",
+      "name": "Generate Caption (GPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3080, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst previousData = $('Loop Over Moments').first().json;\n\nlet gptContent = '';\nif (response.choices && response.choices[0] && response.choices[0].message) {\n  gptContent = response.choices[0].message.content;\n} else {\n  gptContent = '{\"hook\": \"You need to see this\", \"caption\": \"Watch till the end!\", \"hashtags\": [\"#viral\", \"#foryou\", \"#trending\", \"#mustwatch\", \"#fyp\"]}';\n}\n\nlet cleanedResponse = gptContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\ntry {\n  const caption = JSON.parse(cleanedResponse);\n  \n  return [{\n    json: {\n      clipIndex: previousData.clipIndex,\n      clipPath: previousData.clipPath,\n      hook: caption.hook,\n      caption: caption.caption,\n      hashtags: caption.hashtags,\n      jobId: previousData.jobId,\n      workDir: previousData.workDir,\n      callbackUrl: previousData.callbackUrl,\n      platform: previousData.platform,\n      reason: previousData.reason\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      clipIndex: previousData.clipIndex,\n      clipPath: previousData.clipPath,\n      hook: previousData.hookPotential || \"You need to see this\",\n      caption: \"Watch till the end!\",\n      hashtags: [\"#viral\", \"#foryou\", \"#trending\", \"#mustwatch\", \"#fyp\"],\n      jobId: previousData.jobId,\n      workDir: previousData.workDir,\n      callbackUrl: previousData.callbackUrl,\n      platform: previousData.platform,\n      reason: previousData.reason\n    }\n  }];\n}"
+      },
+      "id": "parse-caption",
+      "name": "Parse Caption",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3300, 300]
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "filePath": "={{ $json.clipPath }}",
+        "options": {
+          "fileName": "=clip_{{ $json.clipIndex }}.mp4",
+          "mimeType": "video/mp4"
+        }
+      },
+      "id": "read-clip",
+      "name": "Read Clip File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [3520, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('Parse Caption').first().json;\nconst binaryData = $input.first().binary.data;\n\n// R2 Configuration from environment\nconst accountId = process.env.R2_ACCOUNT_ID || '';\nconst bucketName = process.env.R2_BUCKET_NAME || '';\n\nif (!accountId || !bucketName) {\n  throw new Error('R2_ACCOUNT_ID and R2_BUCKET_NAME must be set in environment variables');\n}\n\nconst objectKey = `clips/${prevData.jobId}/clip_${prevData.clipIndex}.mp4`;\nconst uploadUrl = `https://${accountId}.r2.cloudflarestorage.com/${bucketName}/${objectKey}`;\nconst publicUrl = `https://pub-${accountId}.r2.dev/${objectKey}`;\n\nreturn [{\n  json: {\n    clipIndex: prevData.clipIndex,\n    clipPath: prevData.clipPath,\n    uploadUrl: uploadUrl,\n    url: publicUrl,\n    hook: prevData.hook,\n    caption: prevData.caption,\n    hashtags: prevData.hashtags,\n    jobId: prevData.jobId,\n    workDir: prevData.workDir,\n    callbackUrl: prevData.callbackUrl,\n    platform: prevData.platform,\n    uploadStatus: 'pending'\n  },\n  binary: {\n    data: binaryData\n  }\n}];"
+      },
+      "id": "prepare-upload",
+      "name": "Prepare Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3740, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.uploadUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "aws",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "=data",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "upload-r2",
+      "name": "Upload to R2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('Prepare Upload').first().json;\n\nreturn [{\n  json: {\n    clipIndex: prevData.clipIndex,\n    url: prevData.url,\n    hook: prevData.hook,\n    caption: prevData.caption,\n    hashtags: prevData.hashtags,\n    jobId: prevData.jobId,\n    callbackUrl: prevData.callbackUrl\n  }\n}];"
+      },
+      "id": "format-result",
+      "name": "Format Clip Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4180, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "clips",
+        "options": {}
+      },
+      "id": "aggregate-clips",
+      "name": "Aggregate Clips",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [4400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const clips = $input.first().json.clips;\nconst firstClip = clips[0];\n\nconst payload = {\n  jobId: firstClip.jobId,\n  status: 'success',\n  processedAt: new Date().toISOString(),\n  clipCount: clips.length,\n  clips: clips.map(c => ({\n    clipIndex: c.clipIndex,\n    url: c.url,\n    hook: c.hook,\n    caption: c.caption,\n    hashtags: c.hashtags\n  }))\n};\n\nreturn [{\n  json: {\n    callbackUrl: firstClip.callbackUrl,\n    payload: payload\n  }\n}];"
+      },
+      "id": "prepare-callback",
+      "name": "Prepare Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4620, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "send-callback",
+      "name": "Send Success Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { execSync } = require('child_process');\n\ntry {\n  const workDir = $('Set Variables').first().json.workDir;\n  execSync(`rm -rf ${workDir}`);\n  return [{ json: { cleanup: 'success' } }];\n} catch (error) {\n  return [{ json: { cleanup: 'failed', error: error.message } }];\n}"
+      },
+      "id": "cleanup",
+      "name": "Cleanup Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5060, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $input.first().json;\nlet setVars = {};\ntry {\n  setVars = $('Set Variables').first()?.json || {};\n} catch(e) {}\n\n// Fallback: If Set Variables didn't run, try to get callbackUrl from Webhook body\nlet callbackUrl = setVars?.callbackUrl;\nif (!callbackUrl) {\n  try {\n    callbackUrl = $('Webhook Trigger').first().json.body.callbackUrl;\n  } catch (e) {\n    callbackUrl = '';\n  }\n}\n\nconst payload = {\n  jobId: setVars?.jobId || $('Webhook Trigger').first().json.body?.jobId || 'unknown',\n  status: 'failed',\n  failedAt: new Date().toISOString(),\n  error: {\n    stage: errorData.errorStage || 'unknown',\n    message: errorData.errorMessage || errorData.downloadError || errorData.extractError || 'Unknown error occurred',\n    details: null\n  }\n};\n\nreturn [{\n  json: {\n    callbackUrl: callbackUrl || '',\n    payload: payload\n  }\n}];"
+      },
+      "id": "prepare-error-callback",
+      "name": "Prepare Error Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "send-error-callback",
+      "name": "Send Error Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 600]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "errorStage",
+              "value": "download"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json.downloadError || 'Video download failed' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "download-error",
+      "name": "Download Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 500]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "errorStage",
+              "value": "audio_extraction"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json.extractError || 'Audio extraction failed' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-error",
+      "name": "Extract Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Error": {
+      "main": [
+        [
+          {
+            "node": "Prepare Error Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Download Video (yt-dlp)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video (yt-dlp)": {
+      "main": [
+        [
+          {
+            "node": "Check Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Download": {
+      "main": [
+        [
+          {
+            "node": "Extract Audio (FFmpeg)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Error": {
+      "main": [
+        [
+          {
+            "node": "Prepare Error Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Audio (FFmpeg)": {
+      "main": [
+        [
+          {
+            "node": "Check Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Extract": {
+      "main": [
+        [
+          {
+            "node": "Read Audio File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Error": {
+      "main": [
+        [
+          {
+            "node": "Prepare Error Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Audio File": {
+      "main": [
+        [
+          {
+            "node": "Transcribe (Whisper API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe (Whisper API)": {
+      "main": [
+        [
+          {
+            "node": "Format Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Transcript": {
+      "main": [
+        [
+          {
+            "node": "Detect Key Moments (GPT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Key Moments (GPT)": {
+      "main": [
+        [
+          {
+            "node": "Parse Moments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Moments": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Moments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Moments": {
+      "main": [
+        [
+          {
+            "node": "Cut Clip (FFmpeg)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Clips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cut Clip (FFmpeg)": {
+      "main": [
+        [
+          {
+            "node": "Generate Caption (GPT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Caption (GPT)": {
+      "main": [
+        [
+          {
+            "node": "Parse Caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Caption": {
+      "main": [
+        [
+          {
+            "node": "Read Clip File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clip File": {
+      "main": [
+        [
+          {
+            "node": "Prepare Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Upload": {
+      "main": [
+        [
+          {
+            "node": "Upload to R2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to R2": {
+      "main": [
+        [
+          {
+            "node": "Format Clip Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Clip Result": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Moments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Clips": {
+      "main": [
+        [
+          {
+            "node": "Prepare Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Callback": {
+      "main": [
+        [
+          {
+            "node": "Send Success Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Success Callback": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Error Callback": {
+      "main": [
+        [
+          {
+            "node": "Send Error Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "video-processing"
+    },
+    {
+      "name": "automation"
+    }
+  ],
+  "triggerCount": 1,
+  "versionId": "3"
+}
+
