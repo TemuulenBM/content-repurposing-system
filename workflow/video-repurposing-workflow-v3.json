@@ -91,27 +91,27 @@
           "string": [
             {
               "name": "jobId",
-              "value": "={{ $json.body.jobId }}"
+              "value": "={{ $('Webhook Trigger').item.json.body.jobId }}"
             },
             {
               "name": "videoUrl",
-              "value": "={{ $json.body.videoUrl }}"
+              "value": "={{ $('Webhook Trigger').item.json.body.videoUrl }}"
             },
             {
               "name": "callbackUrl",
-              "value": "={{ $json.body.callbackUrl }}"
+              "value": "={{ $('Webhook Trigger').item.json.body.callbackUrl }}"
             },
             {
               "name": "platform",
-              "value": "={{ $json.body.platform || 'tiktok' }}"
+              "value": "={{ $('Webhook Trigger').item.json.body.platform || 'tiktok' }}"
             },
             {
               "name": "style",
-              "value": "={{ $json.body.style || 'educational' }}"
+              "value": "={{ $('Webhook Trigger').item.json.body.style || 'educational' }}"
             },
             {
               "name": "workDir",
-              "value": "=/data/{{ $json.body.jobId }}"
+              "value": "={{ '/data/' + $('Webhook Trigger').item.json.body.jobId }}"
             }
           ]
         },
@@ -125,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { execSync } = require('child_process');\n\nconst workDir = $input.first().json.workDir;\nconst videoUrl = $input.first().json.videoUrl;\n\ntry {\n  // Create directory\n  execSync(`mkdir -p ${workDir}`);\n  \n  // Download video using yt-dlp\n  const command = `yt-dlp -f 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' --merge-output-format mp4 -o '${workDir}/input.mp4' '${videoUrl}' 2>&1`;\n  \n  const result = execSync(command, { \n    encoding: 'utf8',\n    maxBuffer: 50 * 1024 * 1024,\n    timeout: 600000\n  });\n  \n  return [{\n    json: {\n      ...$input.first().json,\n      downloadStatus: 'success',\n      downloadOutput: result\n    }\n  }];\n} catch (error) {\n  return [{\n    json: {\n      ...$input.first().json,\n      downloadStatus: 'failed',\n      downloadError: error.message,\n      downloadOutput: error.stdout || error.stderr || ''\n    }\n  }];\n}"
+        "jsCode": "const { execSync } = require('child_process');\n\nconst input = $input.first().json;\nconst webhookBody = $('Webhook Trigger').first().json.body;\n\nconst jobId = input.jobId || webhookBody.jobId;\nconst workDir = input.workDir || `/data/${jobId}`;\nconst videoUrl = input.videoUrl || webhookBody.videoUrl;\n\ntry {\n  // Create directory\n  execSync(`mkdir -p ${workDir}`);\n  \n  // Download video using yt-dlp\n  const command = `yt-dlp -f 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' --merge-output-format mp4 -o '${workDir}/input.mp4' '${videoUrl}' 2>&1`;\n  \n  const result = execSync(command, {\n    encoding: 'utf8',\n    maxBuffer: 50 * 1024 * 1024,\n    timeout: 600000\n  });\n\n  return [{\n    json: {\n      ...input,\n      jobId,\n      workDir,\n      videoUrl,\n      downloadStatus: 'success',\n      downloadOutput: result\n    }\n  }];\n} catch (error) {\n  return [{\n    json: {\n      ...input,\n      jobId,\n      workDir,\n      videoUrl,\n      downloadStatus: 'failed',\n      downloadError: error.message,\n      downloadOutput: error.stdout || error.stderr || ''\n    }\n  }];\n}"
       },
       "id": "download-video",
       "name": "Download Video (yt-dlp)",
@@ -164,7 +164,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { execSync } = require('child_process');\nconst fs = require('fs');\n\nconst workDir = $input.first().json.workDir;\n\ntry {\n  const command = `ffmpeg -y -i ${workDir}/input.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 ${workDir}/audio.wav 2>&1`;\n  \n  try {\n    execSync(command, { \n      encoding: 'utf8',\n      maxBuffer: 50 * 1024 * 1024,\n      timeout: 300000\n    });\n  } catch (e) {\n    // FFmpeg writes to stderr even on success\n  }\n  \n  if (fs.existsSync(`${workDir}/audio.wav`)) {\n    return [{\n      json: {\n        ...$input.first().json,\n        extractStatus: 'success'\n      }\n    }];\n  } else {\n    throw new Error('Audio file not created');\n  }\n} catch (error) {\n  return [{\n    json: {\n      ...$input.first().json,\n      extractStatus: 'failed',\n      extractError: error.message\n    }\n  }];\n}"
+        "jsCode": "const { execSync } = require('child_process');\nconst fs = require('fs');\n\nconst input = $input.first().json;\nconst webhookBody = $('Webhook Trigger').first().json.body;\n\nconst jobId = input.jobId || webhookBody.jobId;\nconst workDir = input.workDir || `/data/${jobId}`;\n\nif (!workDir || workDir === 'undefined') {\n  throw new Error('workDir is undefined. Cannot extract audio.');\n}\n\ntry {\n  const inputVideo = `${workDir}/input.mp4`;\n  const outputAudio = `${workDir}/audio.wav`;\n  \n  // Check if input video exists\n  if (!fs.existsSync(inputVideo)) {\n    throw new Error(`Input video file not found: ${inputVideo}`);\n  }\n  \n  const command = `ffmpeg -y -i \"${inputVideo}\" -vn -acodec pcm_s16le -ar 16000 -ac 1 \"${outputAudio}\" 2>&1`;\n  \n  try {\n    execSync(command, { \n      encoding: 'utf8',\n      maxBuffer: 50 * 1024 * 1024,\n      timeout: 300000\n    });\n  } catch (e) {\n    // FFmpeg writes to stderr even on success, but check if file was created\n    if (!fs.existsSync(outputAudio)) {\n      throw new Error(`FFmpeg failed: ${e.message}`);\n    }\n  }\n  \n  if (fs.existsSync(outputAudio)) {\n    return [{\n      json: {\n        ...input,\n        jobId,\n        workDir,\n        extractStatus: 'success'\n      }\n    }];\n  } else {\n    throw new Error('Audio file not created after FFmpeg execution');\n  }\n} catch (error) {\n  return [{\n    json: {\n      ...input,\n      jobId,\n      workDir,\n      extractStatus: 'failed',\n      extractError: error.message\n    }\n  }];\n}"
       },
       "id": "extract-audio",
       "name": "Extract Audio (FFmpeg)",
@@ -203,17 +203,12 @@
     },
     {
       "parameters": {
-        "operation": "fromFile",
-        "filePath": "={{ $json.workDir }}/audio.wav",
-        "options": {
-          "fileName": "audio.wav",
-          "mimeType": "audio/wav"
-        }
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst input = $input.first().json;\nconst webhookBody = $('Webhook Trigger').first().json.body;\n\nconst jobId = input.jobId || webhookBody.jobId;\nconst workDir = input.workDir || `/data/${jobId}`;\nconst audioPath = `${workDir}/audio.wav`;\n\ntry {\n  // Check if file exists\n  if (!fs.existsSync(audioPath)) {\n    throw new Error(`Audio file not found: ${audioPath}`);\n  }\n  \n  // Read file as binary\n  const audioBuffer = fs.readFileSync(audioPath);\n  \n  // Convert to base64 for n8n binary format\n  const base64Audio = audioBuffer.toString('base64');\n  \n  return [{\n    json: {\n      ...input,\n      jobId,\n      workDir\n    },\n    binary: {\n      data: {\n        data: base64Audio,\n        mimeType: 'audio/wav',\n        fileName: 'audio.wav'\n      }\n    }\n  }];\n} catch (error) {\n  throw new Error(`Failed to read audio file: ${error.message}`);\n}"
       },
       "id": "read-audio",
       "name": "Read Audio File",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1540, 300]
     },
     {
@@ -343,17 +338,12 @@
     },
     {
       "parameters": {
-        "operation": "fromFile",
-        "filePath": "={{ $json.clipPath }}",
-        "options": {
-          "fileName": "=clip_{{ $json.clipIndex }}.mp4",
-          "mimeType": "video/mp4"
-        }
+        "jsCode": "const fs = require('fs');\n\nconst input = $input.first().json;\nconst clipPath = input.clipPath;\nconst clipIndex = input.clipIndex;\n\ntry {\n  // Check if file exists\n  if (!clipPath || !fs.existsSync(clipPath)) {\n    throw new Error(`Clip file not found: ${clipPath}`);\n  }\n  \n  // Read file as binary\n  const clipBuffer = fs.readFileSync(clipPath);\n  \n  // Convert to base64 for n8n binary format\n  const base64Clip = clipBuffer.toString('base64');\n  \n  return [{\n    json: {\n      ...input\n    },\n    binary: {\n      data: {\n        data: base64Clip,\n        mimeType: 'video/mp4',\n        fileName: `clip_${clipIndex}.mp4`\n      }\n    }\n  }];\n} catch (error) {\n  throw new Error(`Failed to read clip file: ${error.message}`);\n}"
       },
       "id": "read-clip",
       "name": "Read Clip File",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [3520, 300]
     },
     {
